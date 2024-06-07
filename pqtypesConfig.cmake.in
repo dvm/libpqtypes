@@ -1,0 +1,6 @@
+get_filename_component(pqtypes_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+include(CMakeFindDependencyMacro)
+
+if(NOT TARGET pqtypes::pqtypes)
+    include("${pqtypes_CMAKE_DIR}/pqtypes-targets.cmake")
+endif()

@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 project(pqtypes VERSION 1.5.3 LANGUAGES C DESCRIPTION "libpqtypes is a libpq extension")
 
 include(CheckFunctionExists)
+include(CheckStructHasMember)
+include(CheckSymbolExists)
+include(CheckTypeSize)
 include(GNUInstallDirs)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -15,18 +18,22 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
 set(SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/exec.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/geo.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/handler.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/misc.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/network.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/numerics.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/param.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/port.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/record.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/spec.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/utils.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/src/varlena.c
+    ${PROJECT_SOURCE_DIR}/source/src/array.c
+    ${PROJECT_SOURCE_DIR}/source/src/datetime.c
+    ${PROJECT_SOURCE_DIR}/source/src/error.c
+    ${PROJECT_SOURCE_DIR}/source/src/events.c
+    ${PROJECT_SOURCE_DIR}/source/src/exec.c
+    ${PROJECT_SOURCE_DIR}/source/src/geo.c
+    ${PROJECT_SOURCE_DIR}/source/src/handler.c
+    ${PROJECT_SOURCE_DIR}/source/src/misc.c
+    ${PROJECT_SOURCE_DIR}/source/src/network.c
+    ${PROJECT_SOURCE_DIR}/source/src/numerics.c
+    ${PROJECT_SOURCE_DIR}/source/src/param.c
+    ${PROJECT_SOURCE_DIR}/source/src/port.c
+    ${PROJECT_SOURCE_DIR}/source/src/record.c
+    ${PROJECT_SOURCE_DIR}/source/src/spec.c
+    ${PROJECT_SOURCE_DIR}/source/src/utils.c
+    ${PROJECT_SOURCE_DIR}/source/src/varlena.c
 )
 
 set(HEADERS
@@ -35,6 +42,7 @@ set(HEADERS
 
 set(PRIVATE_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/source/src/libpqtypes-int.h
+    ${CMAKE_CURRENT_BINARY_DIR}/pqt_config.h
 )
 
 add_library(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${PRIVATE_HEADERS})
@@ -66,10 +74,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${PostgreSQL_LIBRARIES}
     Threads::Threads
-)
-
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    HAVE_CONFIG_H
 )
 
 if(CMAKE_COMPILER_IS_GNUCC)
@@ -105,6 +109,8 @@ if(Threads_FOUND)
     )
 endif(Threads_FOUND)
 
+# Configure
+
 check_include_file(arpa/inet.h HAVE_ARPA_INET_H)
 check_include_file(limits.h HAVE_LIMITS_H)
 check_include_file(linux/limits.h HAVE_LINUX_LIMITS_H)
@@ -126,17 +132,45 @@ check_include_file(sys/stat.h HAVE_SYS_STAT_H)
 check_include_file(sys/types.h HAVE_SYS_TYPES_H)
 check_include_file(unistd.h HAVE_UNISTD_H)
 
-check_function_exists(ceil HAVE_CEIL)
-check_function_exists(floor HAVE_FLOOR)
 check_function_exists(getaddrinfo HAVE_GETADDRINFO)
 check_function_exists(hstrerror HAVE_HSTRERROR)
 check_function_exists(localtime_r HAVE_LOCALTIME_R)
 check_function_exists(memcmp HAVE_MEMCMP)
-check_function_exists(rint HAVE_RINT)
 check_function_exists(strtol HAVE_STRTOL)
 check_function_exists(strtoll HAVE_STRTOLL)
 check_function_exists(strtoul HAVE_STRTOUL)
 check_function_exists(vsnprintf HAVE_VSNPRINTF)
+
+list(APPEND CMAKE_REQUIRED_LIBRARIES m)
+check_function_exists(ceil HAVE_CEIL)
+check_function_exists(floor HAVE_FLOOR)
+check_function_exists(rint HAVE_RINT)
+list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES m)
+
+check_struct_has_member("struct tm" "tm_zone"   "time.h" HAVE_STRUCT_TM_TM_ZONE)
+check_struct_has_member("struct tm" "tm_gmtoff" "time.h" HAVE_STRUCT_TM_TM_GMTOFF)
+
+if(HAVE_SYS_SOCKET_H)
+    check_struct_has_member("struct sockaddr_storage" "ss_len" "sys/socket.h" HAVE_STRUCT_SOCKADDR_STORAGE_SS_LEN)
+endif(HAVE_SYS_SOCKET_H)
+if(NOT HAVE_STRUCT_SOCKADDR_STORAGE_SS_LEN AND HAVE_NETINET_IN_H)
+    check_struct_has_member("struct sockaddr_storage" "ss_len" "netinet/in.h" HAVE_STRUCT_SOCKADDR_STORAGE_SS_LEN)
+endif(NOT HAVE_STRUCT_SOCKADDR_STORAGE_SS_LEN AND HAVE_NETINET_IN_H)
+
+if(HAVE_ARPA_INET_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES "arpa/inet.h")
+    check_type_size(socklen_t HAVE_SOCKLEN_T)
+    list(REMOVE_ITEM CMAKE_EXTRA_INCLUDE_FILES "arpa/inet.h")
+endif(HAVE_ARPA_INET_H)
+if(NOT HAVE_SOCKLEN_T AND HAVE_SYS_SOCKET_H)
+    list(APPEND CMAKE_EXTRA_INCLUDE_FILES "sys/socket.h")
+    check_type_size(socklen_t HAVE_SOCKLEN_T)
+    list(REMOVE_ITEM CMAKE_EXTRA_INCLUDE_FILES "sys/socket.h")
+endif(NOT HAVE_SOCKLEN_T AND HAVE_SYS_SOCKET_H)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    HAVE_CONFIG_H
+)
 
 configure_file(pqt_config.h.in pqt_config.h @ONLY)
 configure_file(libpqtypes.pc.in libpqtypes.pc @ONLY)
